@@ -157,6 +157,9 @@ def main() -> None:
     save_config(cfg)
     print("\n✅ Success! refresh_token saved to config.json.")
     print("You can now run:  python widget.py")
+    print("\nFor hosting (e.g. Wispbyte), set this as the SPOTIFY_REFRESH_TOKEN env var:")
+    print("  " + refresh)
+    print("(Keep it secret — treat it like a password.)")
 
 
 if __name__ == "__main__":

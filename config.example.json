@@ -2,7 +2,8 @@
   "discord": {
     "application_id": "YOUR_DISCORD_APPLICATION_ID",
     "user_id": "YOUR_DISCORD_USER_ID",
-    "bot_token": "YOUR_DISCORD_BOT_TOKEN"
+    "bot_token": "YOUR_DISCORD_BOT_TOKEN",
+    "image_webhook_url": ""
   },
   "spotify": {
     "client_id": "YOUR_SPOTIFY_CLIENT_ID",

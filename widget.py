@@ -21,14 +21,23 @@ import base64
 import bisect
 import json
 import logging
+import math
 import os
 import re
 import sys
 import time
 from dataclasses import dataclass
+from io import BytesIO
 from logging.handlers import RotatingFileHandler
 
 import requests
+
+# Pillow is optional — only needed for the album-art "widget fix" feature.
+try:
+    from PIL import Image, ImageChops, ImageDraw
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "config.json")
@@ -81,11 +90,39 @@ def die(msg: str) -> None:
     sys.exit(msg)
 
 
+# Secrets/IDs may come from environment variables (preferred when hosting, so no
+# secrets file sits on the server). Env values override config.json when set.
+_ENV_MAP = {
+    ("discord", "application_id"): "DISCORD_APPLICATION_ID",
+    ("discord", "user_id"):        "DISCORD_USER_ID",
+    ("discord", "bot_token"):      "DISCORD_BOT_TOKEN",
+    ("spotify", "client_id"):      "SPOTIFY_CLIENT_ID",
+    ("spotify", "client_secret"):  "SPOTIFY_CLIENT_SECRET",
+    ("spotify", "refresh_token"):  "SPOTIFY_REFRESH_TOKEN",
+    ("discord", "image_webhook_url"): "DISCORD_IMAGE_WEBHOOK_URL",
+}
+
+
 def load_config() -> dict:
-    if not os.path.exists(CONFIG_PATH):
-        die("config.json not found. Copy config.example.json to config.json and fill it in.")
-    with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
-        return json.load(fh)
+    """Load config.json if present, then overlay any matching environment variables.
+
+    Either source alone is enough: locally you use config.json; on a host you can
+    skip the file entirely and provide the six secrets/IDs as env vars.
+    """
+    cfg: dict = {}
+    if os.path.exists(CONFIG_PATH):
+        with open(CONFIG_PATH, "r", encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    cfg.setdefault("discord", {})
+    cfg.setdefault("spotify", {})
+    cfg.setdefault("options", {})
+    for (section, key), env_name in _ENV_MAP.items():
+        value = os.environ.get(env_name)
+        if value:
+            cfg[section][key] = value
+    if not cfg["discord"].get("bot_token") or cfg["discord"]["bot_token"].startswith("YOUR_"):
+        die("No Discord bot token. Set it in config.json or the DISCORD_BOT_TOKEN env var.")
+    return cfg
 
 
 # --------------------------------------------------------------------------- #
@@ -300,6 +337,71 @@ class DiscordWidget:
 
 
 # --------------------------------------------------------------------------- #
+# Album-art "widget fix" — Python port of D.W.I.F (Discord Widget Image Fixer) #
+#   Adds a transparent top strip + rounds the top-right corner so the cover    #
+#   sits inside the widget frame instead of bleeding past it. Algorithm and    #
+#   the 512->17/36 / 1844x853->54/172 calibration are from D.W.I.F by          #
+#   AjaxFNC-YT (https://github.com/AjaxFNC-YT/D.W.I.F); ported to Pillow here   #
+#   so it runs anywhere Python does (no Node required).                         #
+# --------------------------------------------------------------------------- #
+_REF = 512
+_STRIP_BASE, _RADIUS_BASE = 17, 36
+_STRIP_EXP = math.log(54 / 17) / math.log(math.sqrt(1844 * 853) / _REF)
+_RADIUS_EXP = math.log(172 / 36) / math.log(math.sqrt(1844 * 853) / _REF)
+
+
+def _auto(base: float, exponent: float, w: int, h: int) -> int:
+    return max(0, round(base * (math.sqrt(w * h) / _REF) ** exponent))
+
+
+def fix_widget_image(cover: "Image.Image", top_strip: int, radius: int) -> "Image.Image":
+    """Shift the image down by `top_strip` (transparent strip on top) and round the
+    top-right corner by `radius`, matching D.W.I.F's single-frame transform."""
+    cover = cover.convert("RGBA")
+    w, h = cover.size
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    canvas.paste(cover, (0, top_strip))                      # pasting low clips the bottom strip
+    radius = min(radius, w, max(h - top_strip, 0))
+    if radius > 0:
+        mask = Image.new("L", (w, h), 255)
+        md = ImageDraw.Draw(mask)
+        md.rectangle([w - radius, top_strip, w, top_strip + radius], fill=0)   # clear corner box
+        cx, cy = w - radius, top_strip + radius
+        md.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=255)  # restore the quarter-circle
+        r, g, b, a = canvas.split()
+        canvas = Image.merge("RGBA", (r, g, b, ImageChops.multiply(a, mask)))
+    return canvas
+
+
+def process_cover(raw_url: str, webhook_url: str) -> str:
+    """Download the Spotify cover, apply the widget fix, upload it to a Discord
+    webhook, and return the resulting CDN URL. Falls back to the original URL on
+    any problem (missing Pillow, network, etc.) so album art always shows."""
+    if not raw_url or not webhook_url or not _HAS_PIL:
+        if raw_url and webhook_url and not _HAS_PIL:
+            log("Album-art fix skipped: Pillow not installed (pip install Pillow).")
+        return raw_url
+    try:
+        resp = requests.get(raw_url, timeout=15)
+        resp.raise_for_status()
+        cover = Image.open(BytesIO(resp.content)).convert("RGBA").resize((_REF, _REF), Image.LANCZOS)
+        fixed = fix_widget_image(cover, _auto(_STRIP_BASE, _STRIP_EXP, _REF, _REF),
+                                 _auto(_RADIUS_BASE, _RADIUS_EXP, _REF, _REF))
+        buf = BytesIO()
+        fixed.save(buf, format="PNG")
+        sep = "&" if "?" in webhook_url else "?"
+        up = requests.post(f"{webhook_url}{sep}wait=true",
+                           files={"file": ("cover.png", buf.getvalue(), "image/png")}, timeout=20)
+        up.raise_for_status()
+        url = up.json()["attachments"][0]["url"]
+        log("Fixed + hosted album art via webhook.")
+        return url
+    except Exception as exc:  # noqa: BLE001 — never let art break the loop
+        log(f"Album-art fix failed ({exc}); using the original cover.")
+        return raw_url
+
+
+# --------------------------------------------------------------------------- #
 # Helpers                                                                      #
 # --------------------------------------------------------------------------- #
 def fmt_time(seconds: float) -> str:
@@ -308,7 +410,7 @@ def fmt_time(seconds: float) -> str:
 
 
 def build_dynamic(track: Track, line: str, prev: str, nxt: str,
-                  pos: float, status: str, no_lyrics_text: str) -> list[dict]:
+                  pos: float, status: str, no_lyrics_text: str, art_url: str) -> list[dict]:
     pct = int(max(0, min(100, (pos / track.duration * 100) if track.duration else 0)))
     dynamic = [
         {"type": 1, "name": "track", "value": track.name or "Unknown"},
@@ -323,8 +425,8 @@ def build_dynamic(track: Track, line: str, prev: str, nxt: str,
         {"type": 2, "name": "duration_sec", "value": int(track.duration)},
         {"type": 1, "name": "status", "value": status},
     ]
-    if track.art_url:
-        dynamic.append({"type": 3, "name": "album_art", "value": {"url": track.art_url}})
+    if art_url:
+        dynamic.append({"type": 3, "name": "album_art", "value": {"url": art_url}})
     return dynamic
 
 
@@ -342,12 +444,16 @@ def main() -> None:
     no_lyrics_text = opt.get("no_lyrics_text", "♪")
     instrumental_text = opt.get("instrumental_text", "♪ Instrumental ♪")
     show_when_paused = bool(opt.get("show_when_paused", True))
+    image_webhook = cfg["discord"].get("image_webhook_url", "")
+    if image_webhook:
+        log("Album-art widget-fix enabled (covers will be reshaped + hosted via webhook).")
 
     spotify = SpotifyClient(cfg)
     discord = DiscordWidget(cfg)
 
     track: Track | None = None
     current_id: str | None = None
+    art_url = ""             # resolved album-art URL for the current track (fixed+hosted, or raw)
     lyrics = Lyrics([])
     sync_pos = 0.0           # last position reported by Spotify
     sync_mono = time.monotonic()
@@ -395,6 +501,8 @@ def main() -> None:
                     if parsed.id != current_id:
                         current_id = parsed.id
                         log(f"Now playing: {parsed.name} — {parsed.artist}")
+                        # Resolve album art once per track (fix + host, or raw fallback).
+                        art_url = process_cover(parsed.art_url, image_webhook) if image_webhook else parsed.art_url
                         lyrics = fetch_lyrics(parsed)
                         if lyrics.instrumental:
                             log("Track is instrumental.")
@@ -433,7 +541,7 @@ def main() -> None:
             beat = heartbeat > 0 and is_playing and (now - last_patch_at) >= heartbeat
             if (changed or beat) and now >= cooldown_until and (now - last_patch_at) >= min_patch:
                 username = username_fmt.format(track=track.name, artist=track.artist, album=track.album)
-                dynamic = build_dynamic(track, line, prev, nxt, pos, status, no_lyrics_text)
+                dynamic = build_dynamic(track, line, prev, nxt, pos, status, no_lyrics_text, art_url)
                 sent, cooldown = discord.patch(username, dynamic)
                 if sent:
                     last_sent = state

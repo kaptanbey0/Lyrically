@@ -14,19 +14,21 @@ There are two halves:
 > under Discord's rate limits while still feeling live. Expect a sub-second-to-~1s lag on
 > line changes — not karaoke-frame-perfect, but close.
 
-Method based on Chloe Cinders' guide (the saved blog in this folder). Use responsibly —
-abuse gets the whole feature pulled for everyone.
+Method based on [Chloe Cinders' "How to make Discord Widgets"](https://chloecinders.com/blog/discord-widgets)
+guide and the Discord Previews community. Use responsibly — abuse gets the whole feature pulled for
+everyone.
 
 ---
 
-## Part 0 — Prerequisites (already done on this machine)
+## Part 0 — Prerequisites
 
-- Python 3.13 ✅ and the `requests` library ✅ (verified). If you ever move machines:
+- **Python 3.9+** and the `requests` library:
   `pip install -r requirements.txt`
 - Copy the config template and keep it private (it will hold tokens):
 
   ```powershell
-  Copy-Item config.example.json config.json
+  Copy-Item config.example.json config.json   # Windows PowerShell
+  # cp config.example.json config.json         # macOS/Linux
   ```
 
 You'll fill `config.json` in as you go.
@@ -358,11 +360,11 @@ own, and sips resources (it mostly sleeps). This works by running the script wit
 > Run `python widget.py` once interactively first to confirm it works (you'll see the logs).
 > When running hidden you can't see stdout — so the script logs to **`widget.log`** next to it.
 
-### Method A — Startup folder (recommended on this machine) ✅
+### Method A — Startup folder (recommended) ✅
 
-Most reliable here because your Python is the **Microsoft Store** build (its `pythonw.exe` is an
-app-execution alias that resolves cleanly in your normal logon session). Already verified working
-on your setup.
+The most reliable option, especially if your Python is the **Microsoft Store** build — its
+`pythonw.exe` is an app-execution alias that resolves cleanly in your normal logon session (and can
+be flaky under Task Scheduler).
 
 1. Double-click **`start-widget.vbs`** — the updater starts hidden immediately. (Check `widget.log`
    to confirm it's alive.)
@@ -403,6 +405,34 @@ Tiny. The loop sleeps `tick_interval_seconds` between checks, only calls Spotify
 `poll_interval_seconds`, and only PATCHes Discord when the lyric line changes — so CPU is
 near-idle and memory is just the Python + `requests` baseline (~20–30 MB). `widget.log` is
 size-capped (rotates at ~1 MB, keeps 2 old copies).
+
+---
+
+## Part 12 — (Optional) Fix the album-art shape
+
+By default the cover can bleed past the widget's rounded frame. This optional feature reshapes each
+cover — adds a small transparent top strip and rounds the **top-right** corner — so it sits neatly
+inside the frame. It's a Python/Pillow port of **[D.W.I.F (Discord Widget Image Fixer)](https://github.com/AjaxFNC-YT/D.W.I.F)**
+by [AjaxFNC-YT](https://github.com/AjaxFNC-YT); no Node required, so it works on a Python-only host too.
+
+Because Discord's widget image field needs a **URL** (not a file), each fixed cover is uploaded to a
+**Discord webhook** and the returned `cdn.discordapp.com` URL is what gets shown.
+
+1. **Install Pillow** (it's in `requirements.txt`): `pip install -r requirements.txt`.
+2. **Create a webhook** in a *private* channel only you can see: Channel → **Edit Channel →
+   Integrations → Webhooks → New Webhook** → **Copy Webhook URL**. (Each fixed cover posts a message
+   there; treat it as a throwaway image bucket.)
+3. **Add it to config** — `discord.image_webhook_url`, or the `DISCORD_IMAGE_WEBHOOK_URL` env var:
+   ```json
+   "discord": { "...": "...", "image_webhook_url": "https://discord.com/api/webhooks/…" }
+   ```
+4. Restart `widget.py`. On each track change you'll see `Fixed + hosted album art via webhook.`
+
+**Notes / caveats**
+- Leave `image_webhook_url` empty to disable — covers then use Spotify's URL as-is (default behaviour).
+- If anything fails (no Pillow, network, etc.) it silently falls back to the original cover, so art always shows.
+- Discord CDN links are signed and expire (~24h). That's a non-issue for art that changes per song; only a cover left "current" for over a day could 404 until the next track.
+- The webhook URL is a write credential for that one channel — keep it private (it's git-ignored in `config.json`).
 
 ---
 
