@@ -1,4 +1,4 @@
-# Lyrically - Express Setup Edition.
+# Spotify realtime-lyrics Discord widget — full setup
 
 This builds a personal Discord profile widget that shows your **current Spotify song +
 the live lyric line**, driven by a small Python script running on your PC.
@@ -50,6 +50,13 @@ editor, and hands you a **filled-in `config.json` to download**.
 > paste, not a double-click (open the dev portal, press F12 → Console, paste; **do not** run it with
 > `node`). It only calls Discord's own API; read it first if you like. The widget comes out fully
 > shaped, so you normally don't need the editor (it's opened just in case you want to tweak anything).
+
+> 🔁 **If a step fails:** reload the page and paste the script again **with the same app name** — it
+> resumes rather than duplicating: it reuses the existing app, widget config, and uploaded images, and
+> it skips the profile-add if the widget is already there. Non-critical steps show an amber ⚠ with the
+> real error and a manual fallback (e.g. an Authorize link on the final card) instead of stopping the
+> run. If earlier attempts left duplicate apps, delete the extras in the Developer Portal (open the
+> app → General Information → Delete App at the bottom).
 
 ### Even smoother: a widget-configurator extension
 
@@ -294,6 +301,10 @@ Skipping this makes the widget show *"Your game stats are still syncing. Keep pl
 ---
 
 ## Part 8 — Spotify Developer app (for current song + position)
+
+> ⚠️ **Requires Spotify Premium.** Spotify gates **Web API** access behind Premium, and Lyrically
+> reads your playback through it. On a Free account you'll see an *"Upgrade to Spotify Premium to
+> access the Web API"* message and it won't work — a Premium subscription is required.
 
 1. Go to the **[Spotify Developer Dashboard](https://developer.spotify.com/dashboard)** → **Create app**.
 2. Name/description: anything. **Redirect URI:** add exactly **`http://127.0.0.1:8888/callback`**

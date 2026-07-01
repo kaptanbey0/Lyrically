@@ -10,6 +10,7 @@ Lyrically is a small Python service that follows your Spotify playback, fetches 
 pushes the current line to a custom Discord profile widget in near-realtime.
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
+![Spotify Premium](https://img.shields.io/badge/Spotify-Premium%20required-1DB954?logo=spotify&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20cross--platform%20core-blue)
 
@@ -57,7 +58,13 @@ whatever was last pushed to your profile. All the realtime behaviour lives in [`
 ### Prerequisites
 
 - **Python 3.9+**: [python.org](https://www.python.org/downloads/) or the Microsoft Store
-- A **Discord account** and a **Spotify account** (Free or Premium)
+- A **Discord account**
+- A **Spotify Premium account** (required, see the note below)
+
+> ⚠️ **Spotify Premium is required.** Lyrically reads what you're playing through the **Spotify Web
+> API**, and Spotify now gates Web API access behind Premium. On a Free account the app will fail at
+> the Spotify step (you'll see an "Upgrade to Spotify Premium to access the Web API" message), so a
+> Premium subscription is needed to run Lyrically.
 - Windows is fully supported (including hidden background mode); the core script is cross-platform
 
 ### 1. Get the code
@@ -171,7 +178,7 @@ Spotify; all trademarks belong to their respective owners.
 - Method based on [Chloe Cinders' "How to make Discord Widgets"](https://chloecinders.com/blog/discord-widgets) guide.
 - Profile-injection technique from the **Discord Previews** community.
 - Lyrics from [LRCLIB](https://lrclib.net).
-- Album-art widget-fix algorithm ported from **[D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F)** by [AjaxFNC-YT](https://github.com/AjaxFNC-YT) and [tuning4frames](https://github.com/tuning4frames)
+- Album-art widget-fix algorithm ported from **[D.W.I.F](https://github.com/AjaxFNC-YT/D.W.I.F)** by [AjaxFNC-YT](https://github.com/AjaxFNC-YT).
 - Automated setup script (`lyrically-setup.js`) and importable `lyrically_widget_config.json` adapted from **[aamiaa's Widget Creator](https://gist.github.com/aamiaa/7cdd590e3949cd654758bc90bcb4710b)** and the community "Discord Widget Configurator" extension built on it.
 
 ## License
