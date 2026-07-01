@@ -1,4 +1,4 @@
-# Spotify realtime-lyrics Discord widget — full setup
+# Lyrically - Express Setup Edition.
 
 This builds a personal Discord profile widget that shows your **current Spotify song +
 the live lyric line**, driven by a small Python script running on your PC.
