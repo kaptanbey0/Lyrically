@@ -671,6 +671,10 @@ def main() -> None:
     cfg = load_config()
     opt = cfg.get("options", {})
     poll_interval = float(opt.get("poll_interval_seconds", 5))
+    # Slower cadence while paused or idle: nothing changes quickly then, and
+    # (especially on the spotify source) polling tightly 24/7 is what racks up
+    # the request volume that earns multi-hour rate-limit penalties.
+    idle_poll = max(float(opt.get("idle_poll_interval_seconds", 12)), poll_interval)
     tick = float(opt.get("tick_interval_seconds", 0.5))
     min_patch = float(opt.get("min_patch_interval_seconds", 0.75))
     heartbeat = float(opt.get("heartbeat_seconds", 0))  # 0 = push only on lyric-line change
@@ -703,7 +707,9 @@ def main() -> None:
         now = time.monotonic()
 
         # 1) Poll the music source on its own cadence (respecting any back-off).
-        if now - last_poll >= poll_interval and now >= source_backoff_until:
+        #    Full speed while playing; relaxed while paused/idle.
+        interval = poll_interval if (track is not None and is_playing) else idle_poll
+        if now - last_poll >= interval and now >= source_backoff_until:
             last_poll = now
             fresh: Track | None = None
             poll_ok = True

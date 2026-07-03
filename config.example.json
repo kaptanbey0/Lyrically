@@ -21,7 +21,8 @@
     "lanyard_url": "https://api.lanyard.rest"
   },
   "options": {
-    "poll_interval_seconds": 3,
+    "poll_interval_seconds": 5,
+    "idle_poll_interval_seconds": 12,
     "tick_interval_seconds": 0.25,
     "min_patch_interval_seconds": 0.5,
     "pacing": "smooth",
