@@ -7,4 +7,4 @@ on:
     - cron: "0 0 */1 * *"
 
 jobs:
-pip install -r requirements.txt && python3 widget.py
+python3 widget.py
