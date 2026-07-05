@@ -1,0 +1,10 @@
+name: Update Steam Widget
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "0 0 */1 * *"
+
+jobs:
+pip install -r requirements.txt && python3 widget.py
